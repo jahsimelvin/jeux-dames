@@ -1,4 +1,3 @@
-# models.py
 import mysql.connector
 from database import connect_to_database
 

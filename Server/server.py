@@ -1,68 +1,52 @@
-# server.py
 import socket
 import threading
-from models import create_user, get_user_by_email, create_game, get_game_by_id
-from game import Game
-from config import SECRET_KEY
-import hashlib
+import tkinter as tk
 
-# Fonction de gestion des connexions utilisateurs
-def handle_client(client_socket, addr):
-    print(f"Nouvelle connexion depuis {addr}")
+# Configuration du serveur
+HOST = 'localhost'
+PORT = 5555
 
-    try:
-        # Exemple simple : Demander à l'utilisateur de se connecter ou de s'inscrire
-        client_socket.send(b"Bienvenue! Tapez '1' pour vous inscrire ou '2' pour vous connecter.\n")
+# Initialisation de la fenêtre Tkinter
+root = tk.Tk()
+root.title("Serveur du Jeu de Dames - Attente des Joueurs")
+root.geometry("400x200")
 
-        option = client_socket.recv(1024).decode('utf-8')
+# Label pour afficher l'état des connexions
+status_label = tk.Label(root, text="Serveur en attente de connexions...", font=("Arial", 12))
+status_label.pack(pady=20)
 
-        if option == '1':  # Inscription
-            client_socket.send(b"Entrez votre nom: ")
-            nom = client_socket.recv(1024).decode('utf-8')
-            client_socket.send(b"Entrez votre email: ")
-            email = client_socket.recv(1024).decode('utf-8')
-            client_socket.send(b"Entrez votre mot de passe: ")
-            mot_de_passe = client_socket.recv(1024).decode('utf-8')
-            mot_de_passe_hash = hashlib.sha256(mot_de_passe.encode()).hexdigest()  # Hachage du mot de passe
+# Création du serveur socket
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.bind((HOST, PORT))
+server.listen(2)  # On attend exactement 2 joueurs
 
-            create_user(nom, email, mot_de_passe_hash)
-            client_socket.send("Inscription réussie!\n".encode('utf-8'))
+players = []  # Liste des joueurs connectés
 
-        elif option == '2':  # Connexion
-            client_socket.send(b"Entrez votre email: ")
-            email = client_socket.recv(1024).decode('utf-8')
-            client_socket.send(b"Entrez votre mot de passe: ")
-            mot_de_passe = client_socket.recv(1024).decode('utf-8')
-            mot_de_passe_hash = hashlib.sha256(mot_de_passe.encode()).hexdigest()
+def update_status(message):
+    """Met à jour le texte affiché dans la fenêtre Tkinter."""
+    status_label.config(text=message)
+    root.update_idletasks()  # Rafraîchir la fenêtre
 
-            user = get_user_by_email(email)
-            if user and user[3] == mot_de_passe_hash:
-                client_socket.send("Connexion réussie!\n".encode('utf-8'))
-            else:
-                client_socket.send(b"Email ou mot de passe incorrect.\n")
-                client_socket.close()
-                return
+def handle_player(player_socket):
+    """Gère les connexions des joueurs et met à jour l'interface graphique."""
+    global players
 
-        # Après la connexion, gérer la partie
-        client_socket.send(b"Recherche d'un adversaire...\n")
-        # Ici tu peux décider de lancer une partie après l'inscription
+    players.append(player_socket)
+    nb_joueurs = len(players)  # Nombre de joueurs connectés
 
-    except Exception as e:
-        print(f"Erreur de connexion: {e}")
-    finally:
-        client_socket.close()
+    if nb_joueurs == 1:
+        update_status("Player1 connecté. En attente de Player2...")
+    elif nb_joueurs == 2:
+        update_status("Les deux joueurs sont connectés. Bonne partie à vous !")
 
-# Fonction pour démarrer le serveur
 def start_server():
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind(('localhost', 5555))  # Écoute sur localhost et port 5555
-    server.listen(5)
-    print("Le serveur est prêt à accepter les connexions...")
+    """Démarre le serveur et accepte les connexions des joueurs."""
+    while len(players) < 2:  # On attend seulement deux joueurs
+        player_socket, _ = server.accept()
+        threading.Thread(target=handle_player, args=(player_socket,)).start()
 
-    while True:
-        client_socket, addr = server.accept()
-        client_handler = threading.Thread(target=handle_client, args=(client_socket, addr))
-        client_handler.start()
+# Lancement du serveur dans un thread séparé pour ne pas bloquer Tkinter
+threading.Thread(target=start_server, daemon=True).start()
 
-if __name__ == "__main__":
-    start_server()
+# Lancer l'interface graphique
+root.mainloop()
